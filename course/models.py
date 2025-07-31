@@ -1,5 +1,6 @@
 from django.db import models
 from django.conf import settings
+from uuid import uuid4
 
 
 class Category(models.Model):
@@ -30,3 +31,26 @@ class Course(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class Order(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    course = models.ForeignKey(Course, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class Cart(models.Model):
+    id = models.UUIDField(primary_key=True, editable=False, default=uuid4)
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Cart ({self.user.username})"
+
+
+class CartItem(models.Model):
+    cart = models.ForeignKey(Cart, on_delete=models.CASCADE, related_name="items")
+    course = models.ForeignKey("Course", on_delete=models.CASCADE)
+
+    class Meta:
+        unique_together = ("cart", "course")
