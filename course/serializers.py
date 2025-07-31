@@ -1,9 +1,16 @@
 from rest_framework import serializers
-from .models import Course
+from .models import Category, Course
+
+
+class CategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Category
+        fields = ["id", "name"]
 
 
 class CourseSerializer(serializers.ModelSerializer):
     created_by = serializers.ReadOnlyField(source="created_by.email")
+    category = CategorySerializer(many=True, read_only=True)
 
     class Meta:
         model = Course
@@ -13,8 +20,10 @@ class CourseSerializer(serializers.ModelSerializer):
             "title",
             "slug",
             "description",
+            "category",
+            "price_before",
+            "price_after",
             "cme_credits",
-            "price",
             "thumbnail",
             "course_id",
             "created_at",
