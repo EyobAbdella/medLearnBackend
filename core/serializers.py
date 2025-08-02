@@ -1,8 +1,28 @@
-from django.contrib.auth import authenticate
+from django.core.mail import send_mail
+from django.urls import reverse
+from django.conf import settings
+from django.utils.http import urlsafe_base64_encode
+from django.utils.encoding import force_bytes
+from django.contrib.auth.tokens import default_token_generator
 from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import User
 from .moodle import create_moodle_user
+
+
+def send_activation_email(user):
+    uid = urlsafe_base64_encode(force_bytes(user.pk))
+    token = default_token_generator.make_token(user)
+
+    activation_link = f"{settings.FRONTEND_URL}/activate/{uid}/{token}/"
+
+    send_mail(
+        subject="Activate your account",
+        message=f"Hi {user.first_name},\nPlease activate your account:\n{activation_link}",
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[user.email],
+        fail_silently=False,
+    )
 
 
 class SignupSerializer(serializers.ModelSerializer):
@@ -28,19 +48,16 @@ class SignupSerializer(serializers.ModelSerializer):
         user = User(**validated_data)
         user.set_password(password)
 
-        # print("*" * 200)
-        # print("role:", user.role)
-        # print("*" * 200)
-
-        try:
-            moodle_user_id = create_moodle_user(user, password)
-            user.moodle_user_id = moodle_user_id
-        except Exception as e:
-            raise serializers.ValidationError(
-                {"moodle": f"Failed to register on Moodle: {str(e)}"}
-            )
+        # try:
+        #     moodle_user_id = create_moodle_user(user, password)
+        #     user.moodle_user_id = moodle_user_id
+        # except Exception as e:
+        #     raise serializers.ValidationError(
+        #         {"moodle": f"Failed to register on Moodle: {str(e)}"}
+        #     )
 
         user.save()
+        send_activation_email(user)
         return user
 
 
@@ -60,6 +77,10 @@ class LoginSerializer(serializers.Serializer):
         except User.DoesNotExist:
             raise serializers.ValidationError("Invalid username or password")
 
+        if not user.is_active:
+            raise serializers.ValidationError(
+                "Your account is not activated. Please check your email to activate."
+            )
         if not user.check_password(password):
             raise serializers.ValidationError("Invalid username or password")
 

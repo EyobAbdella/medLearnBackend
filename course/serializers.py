@@ -59,8 +59,18 @@ class OrderSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Order
-        fields = ["id", "user", "course", "created_at"]
-        read_only_fields = ["created_at"]
+        fields = [
+            "id",
+            "user",
+            "course",
+            "created_at",
+            "status",
+            "complaint",
+            "complaint_status",
+            "refund_requested",
+            "refund_approved",
+        ]
+        read_only_fields = ["created_at", "user", "refund_approved", "complaint_status"]
 
     def create(self, validated_data):
         user = self.context["user"]

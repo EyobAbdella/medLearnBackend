@@ -34,9 +34,33 @@ class Course(models.Model):
 
 
 class Order(models.Model):
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("processing", "Processing"),
+        ("learning", "Learning"),
+        ("completed", "Completed"),
+        ("canceled", "Canceled"),
+    ]
+
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     course = models.ForeignKey(Course, on_delete=models.CASCADE)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
     created_at = models.DateTimeField(auto_now_add=True)
+
+    complaint = models.TextField(blank=True, null=True)
+    complaint_status = models.CharField(
+        max_length=20,
+        choices=[
+            ("none", "None"),
+            ("submitted", "Submitted"),
+            ("in_review", "In Review"),
+            ("resolved", "Resolved"),
+            ("rejected", "Rejected"),
+        ],
+        default="none",
+    )
+    refund_requested = models.BooleanField(default=False)
+    refund_approved = models.BooleanField(default=False)
 
 
 class Cart(models.Model):

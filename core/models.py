@@ -15,7 +15,9 @@ class UserAccountManager(BaseUserManager):
 
         role = extra_fields.get("role", User.STUDENT)
 
-        if role != User.ADMIN and not extra_fields.get("moodle_user_id"):
+        if role not in [User.ADMIN, User.MANAGER] and not extra_fields.get(
+            "moodle_user_id"
+        ):
             raise ValueError("Users must have a Moodle user ID.")
 
         email = self.normalize_email(email)
@@ -27,6 +29,7 @@ class UserAccountManager(BaseUserManager):
     def create_superuser(self, username, email, password=None, **extra_fields):
         extra_fields.setdefault("role", "admin")
         extra_fields.setdefault("is_staff", True)
+        extra_fields.setdefault("is_active", True)
         extra_fields.setdefault("is_superuser", True)
 
         return self.create_user(username, email, password, **extra_fields)
@@ -55,7 +58,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     moodle_user_id = models.PositiveIntegerField(blank=True, null=True)
 
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default=STUDENT)
-    is_active = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=False)
     is_staff = models.BooleanField(default=False)
     date_joined = models.DateTimeField(auto_now_add=True)
 

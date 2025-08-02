@@ -56,6 +56,14 @@ class ReportViewSet(viewsets.ModelViewSet):
     serializer_class = OrderSerializer
     permission_classes = [permissions.IsAdminUser]
     http_method_names = ["get"]
+    filterset_fields = [
+        "status",
+        "course__title",
+        "user__email",
+        "complaint_status",
+        "refund_requested",
+        "refund_approved",
+    ]
 
     def get_queryset(self):
         course_id = self.kwargs.get("course_pk")
@@ -131,6 +139,45 @@ class ReportViewSet(viewsets.ModelViewSet):
         buffer.seek(0)
         return HttpResponse(buffer, content_type="application/pdf")
 
+    @action(detail=False, methods=["get"])
+    def abandoned_orders(self, request, course_pk=None):
+        """List orders that are stuck (not completed)"""
+        orders = self.get_queryset().filter(
+            status__in=["pending", "processing", "learning"]
+        )
+        serializer = self.get_serializer(orders, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["patch"])
+    def resolve_complaint(self, request, pk=None):
+        """Admin resolves or rejects a complaint"""
+        order = self.get_object()
+        action = request.data.get("action")
+
+        if action == "resolve":
+            order.complaint_status = "resolved"
+        elif action == "reject":
+            order.complaint_status = "rejected"
+        else:
+            return Response({"detail": "Invalid action"}, status=400)
+
+        order.save()
+        return Response(OrderSerializer(order).data)
+
+    @action(detail=True, methods=["patch"])
+    def approve_refund(self, request, pk=None):
+        """Admin approves refund and cancels course"""
+        order = self.get_object()
+        if not order.refund_requested:
+            return Response({"detail": "No refund requested."}, status=400)
+
+        order.refund_approved = True
+        order.status = "canceled"
+        order.save()
+        # TODO: Integrate with payment gateway or trigger webhook
+
+        return Response(OrderSerializer(order).data)
+
 
 class CartViewSet(viewsets.ModelViewSet):
     serializer_class = CartSerializer
@@ -168,14 +215,41 @@ class CartItemViewSet(viewsets.ModelViewSet):
 class OrderViewSet(viewsets.ModelViewSet):
     http_method_names = ["get", "post"]
     permission_classes = [permissions.IsAuthenticated]
+    serializer_class = OrderSerializer
 
     def get_queryset(self):
-        return Order.objects.filter(user=self.request.user)
+        return Order.objects.select_related("course").filter(user=self.request.user)
 
-    def get_serializer_class(self):
-        if self.request.method == "POST":
-            return OrderCreateSerializer
-        return OrderSerializer
+    @action(detail=True, methods=["get"])
+    def course_progress(self, request, pk=None):
+        order = self.get_object()
+
+        if order.status == "completed":
+            return Response(
+                {
+                    "course_title": order.course.title,
+                    "status": "completed",
+                    "message": "CME registration completed",
+                }
+            )
+
+        if order.status == "learning":
+            return Response(
+                {
+                    "course_title": order.course.title,
+                    "status": "learning",
+                    "action": "start_course",
+                    "moodle_url": f"https://moodle.yourdomain.com/course/{order.course.id}",
+                }
+            )
+
+        return Response(
+            {
+                "course_title": order.course.title,
+                "status": order.status,
+                "message": "Your course has not started yet.",
+            }
+        )
 
     def create(self, request):
         serializer = OrderCreateSerializer(
@@ -187,3 +261,29 @@ class OrderViewSet(viewsets.ModelViewSet):
             orders, many=True, context={"request": request}
         )
         return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"])
+    def submit_complaint(self, request, pk=None):
+        order = self.get_object()
+        complaint = request.data.get("complaint", "").strip()
+
+        if not complaint:
+            return Response({"detail": "Complaint text is required."}, status=400)
+
+        order.complaint = complaint
+        order.complaint_status = "submitted"
+        order.save()
+        return Response(OrderSerializer(order).data)
+
+    @action(detail=True, methods=["post"])
+    def request_refund(self, request, pk=None):
+        order = self.get_object()
+
+        if order.status == "completed":
+            return Response(
+                {"detail": "Completed orders cannot be refunded."}, status=400
+            )
+
+        order.refund_requested = True
+        order.save()
+        return Response(OrderSerializer(order).data)

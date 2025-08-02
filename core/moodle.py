@@ -114,3 +114,30 @@ def assign_system_role(moodle_user_id, role_id):
     print(
         f"✅ Assigned role ID {role_id} to user ID {moodle_user_id} at system context"
     )
+
+
+def get_moodle_login_url(user):
+    service = "moodle_mobile_app"  # default service that allows token login
+    login_url = (
+        f"{MOODLE_URL.replace('/webservice/rest/server.php', '')}/login/token.php"
+    )
+    payload = {
+        "username": user.username,
+        "password": user.raw_password,  # Save this temporarily during registration or store encrypted
+        "service": service,
+    }
+
+    response = requests.post(login_url, data=payload)
+    response.raise_for_status()
+    data = response.json()
+
+    if "error" in data:
+        raise Exception(f"SSO Login Error: {data['error']}")
+
+    token = data["token"]
+
+    # Moodle autologin URL using token (redirects to dashboard or specific page)
+    redirect_url = (
+        f"{MOODLE_URL.replace('/webservice/rest/server.php', '')}/?wstoken={token}"
+    )
+    return redirect_url
